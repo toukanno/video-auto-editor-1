@@ -1,44 +1,66 @@
-# video-auto-editor-1（VideoFactory AI）
+# VideoFactory AI
 
-動画編集自動化ツールの試作1です。Laravel製のバックエンド処理パイプラインとして、動画のアップロードからテロップ生成・YouTube/TikTok投稿までを自動化します。
+> Laravel video automation pipeline / 動画自動編集バックエンド
 
-## 概要
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Laravel](https://img.shields.io/badge/Laravel-12-FF2D20?logo=laravel)](https://laravel.com/)
 
-1本の動画をアップロードするだけで以下を自動処理:
+1本の動画をアップロードするだけで、**文字起こし → テロップ生成 → 無音カット → レンダリング → YouTube/TikTok投稿** までを自動化する Laravel 製パイプラインです。
 
-1. 音声抽出（FFmpeg）
-2. 文字起こし（OpenAI Whisper API）
-3. テロップ整形（LLM）
-4. 無音検出・カット
-5. 字幕ファイル生成（SRT/ASS）
-6. レンダリング（テロップ焼き込み + ショート動画変換）
-7. YouTube / TikTok 自動投稿
+Upload a video and automatically transcribe, subtitle, render, and publish to YouTube/TikTok.
 
-## 技術スタック
+## Features / 機能
 
-- **Backend**: Laravel 12 / PHP 8.3+
-- **動画処理**: FFmpeg / FFprobe
-- **文字起こし**: OpenAI Whisper API
-- **テロップ整形**: OpenAI GPT-4o-mini
-- **Frontend**: Blade + Tailwind CSS + Alpine.js
-- **投稿連携**: YouTube Data API / TikTok Content Posting API
+| Feature | Description |
+|---|---|
+| 🎤 Transcription | OpenAI Whisper API で文字起こし |
+| 📝 Caption Styling | LLM でテロップ整形（口癖削除・強調抽出） |
+| 🔇 Silence Detection | FFmpeg で無音区間を自動検出・カット |
+| 🎬 Rendering | テロップ焼き込み + 9:16 ショート動画変換 |
+| 📤 YouTube Upload | YouTube Data API で自動投稿 |
+| 📱 TikTok Draft | TikTok Content Posting API で下書き投稿 |
+| 🖼️ Thumbnails | 動画からサムネイルを自動生成 |
 
-## ディレクトリ
+## Architecture / アーキテクチャ
 
 ```
-video-factory/          # Laravelプロジェクト本体
+video-factory/
 ├── app/
-│   ├── Http/Controllers/  # VideoController, RenderController 等
-│   ├── Jobs/              # TranscribeVideoJob, RenderVideoJob 等
-│   ├── Models/            # Video, TranscriptSegment 等
-│   └── Services/          # FFmpeg, YouTube, TikTok 連携
-├── config/
-├── database/migrations/
-├── resources/views/       # Blade テンプレート
-└── routes/
+│   ├── Http/Controllers/
+│   │   ├── VideoController.php        # 動画 CRUD
+│   │   ├── RenderController.php       # レンダリング操作
+│   │   ├── PublishController.php      # 投稿操作
+│   │   └── CaptionStyleController.php # テロップスタイル管理
+│   ├── Jobs/
+│   │   ├── ExtractAudioJob.php        # 音声抽出
+│   │   ├── TranscribeVideoJob.php     # Whisper 文字起こし
+│   │   ├── NormalizeTranscriptJob.php # LLM テロップ整形
+│   │   ├── DetectSilenceJob.php       # 無音検出
+│   │   ├── BuildCaptionFileJob.php    # SRT/ASS 生成
+│   │   ├── RenderVideoJob.php         # FFmpeg レンダリング
+│   │   ├── GenerateThumbnailJob.php   # サムネイル生成
+│   │   ├── PublishYoutubeJob.php      # YouTube 投稿
+│   │   └── PublishTikTokDraftJob.php  # TikTok 下書き
+│   ├── Models/                        # Eloquent models
+│   └── Services/                      # FFmpeg, YouTube, TikTok
+├── config/videofactory.php            # アプリ設定
+├── database/migrations/               # DB スキーマ
+├── resources/views/                   # Blade + Tailwind UI
+└── routes/web.php                     # ルーティング
 ```
 
-## セットアップ
+## Tech Stack / 技術スタック
+
+| Layer | Technology |
+|---|---|
+| Backend | Laravel 12 / PHP 8.3+ |
+| Video | FFmpeg / FFprobe |
+| AI | OpenAI Whisper API + GPT-4o-mini |
+| Frontend | Blade + Tailwind CSS + Alpine.js |
+| DB | SQLite (dev) / MySQL / PostgreSQL |
+| Upload | YouTube Data API / TikTok Content Posting API |
+
+## Installation / インストール
 
 ```bash
 cd video-factory
@@ -46,12 +68,28 @@ composer install
 cp .env.example .env
 php artisan key:generate
 php artisan migrate
-php artisan serve
 ```
 
-## 使い分け
+`.env` を編集:
 
-| リポジトリ | 役割 |
+```
+OPENAI_API_KEY=sk-your-key-here
+YOUTUBE_CLIENT_ID=...
+YOUTUBE_CLIENT_SECRET=...
+```
+
+```bash
+php artisan serve
+# → http://localhost:8000
+```
+
+## Related / 関連リポジトリ
+
+| Repository | Role |
 |---|---|
-| **video-auto-editor-1**（このリポ） | Laravel製バックエンド。ジョブ処理・API連携の検証 |
-| video-auto-editor-2 | Electron製デスクトップアプリ。GUI操作でのワークフロー実行 |
+| **video-auto-editor-1** (this) | Laravel backend — job processing pipeline |
+| [video-auto-editor-2](https://github.com/toukanno/video-auto-editor-2) | Electron desktop app — GUI workflow |
+
+## License
+
+[MIT](LICENSE)
