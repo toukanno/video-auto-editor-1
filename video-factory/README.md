@@ -163,3 +163,9 @@ uploaded → extracting_audio → transcribing → normalizing
 - 顔追従クロップは未実装（中央クロップのみ）
 - 複数話者の色分けは未実装
 - TikTok は下書き投稿を優先
+
+## Local Development Notes / ローカル開発メモ
+
+- `APP_ENV=local` または `testing` では、最初のユーザーを自動ログインして UI をすぐ確認できます。
+- 設定画面 (`/settings`) で FFmpeg / OpenAI / YouTube / TikTok の設定有無と最近のログを確認できます。
+- アップロード時に **9:16 ショート / 16:9 ロング / 無音カット / テロップスタイル** を保存し、再実行時も同じ条件を再利用します。

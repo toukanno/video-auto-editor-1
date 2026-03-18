@@ -3,6 +3,7 @@
 use App\Http\Controllers\CaptionStyleController;
 use App\Http\Controllers\PublishController;
 use App\Http\Controllers\RenderController;
+use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\VideoController;
 use Illuminate\Support\Facades\Route;
 
@@ -27,6 +28,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/renders', [RenderController::class, 'index'])->name('renders.index');
     Route::get('/renders/{renderTask}/preview', [RenderController::class, 'preview'])->name('renders.preview');
     Route::get('/renders/{renderTask}/download', [RenderController::class, 'download'])->name('renders.download');
+
+    Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
 
     // Caption Styles
     Route::resource('caption-styles', CaptionStyleController::class)->except(['show']);

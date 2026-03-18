@@ -37,16 +37,26 @@ class Video extends Model
         'status',
         'error_message',
         'last_failed_step',
+        'preferred_caption_style_id',
+        'processing_options',
     ];
 
     protected $casts = [
         'duration_sec' => 'decimal:2',
         'fps' => 'decimal:2',
+        'preferred_caption_style_id' => 'integer',
+        'processing_options' => 'array',
     ];
 
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+
+    public function preferredCaptionStyle(): BelongsTo
+    {
+        return $this->belongsTo(CaptionStyle::class, 'preferred_caption_style_id');
     }
 
     public function transcriptSegments(): HasMany
@@ -81,5 +91,25 @@ class Video extends Model
     public function isFailed(): bool
     {
         return $this->status === self::STATUS_FAILED;
+    }
+
+    public function processingOption(string $key, mixed $default = null): mixed
+    {
+        return data_get($this->processing_options ?? [], $key, $default);
+    }
+
+    public function shouldRenderShort(): bool
+    {
+        return (bool) $this->processingOption('render_short', true);
+    }
+
+    public function shouldRenderLong(): bool
+    {
+        return (bool) $this->processingOption('render_long', false);
+    }
+
+    public function shouldAutoCutSilence(): bool
+    {
+        return (bool) $this->processingOption('auto_cut_silence', true);
     }
 }

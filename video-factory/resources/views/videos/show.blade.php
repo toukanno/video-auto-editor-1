@@ -51,6 +51,28 @@
             </div>
         </div>
 
+        <div class="bg-white shadow-sm rounded-lg p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">編集設定</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <span class="text-gray-500">テロップスタイル</span>
+                    <p class="font-medium">{{ $video->preferredCaptionStyle?->name ?? 'デフォルト' }}</p>
+                </div>
+                <div>
+                    <span class="text-gray-500">無音カット</span>
+                    <p class="font-medium">{{ $video->shouldAutoCutSilence() ? '有効' : '無効' }}</p>
+                </div>
+                <div>
+                    <span class="text-gray-500">生成フォーマット</span>
+                    <p class="font-medium">{{ collect([$video->shouldRenderShort() ? '9:16ショート' : null, $video->shouldRenderLong() ? '16:9ロング' : null])->filter()->implode(' / ') ?: '9:16ショート' }}</p>
+                </div>
+                <div>
+                    <span class="text-gray-500">再実行</span>
+                    <p class="font-medium">保存済み設定を使って再処理します</p>
+                </div>
+            </div>
+        </div>
+
         <!-- Processing Pipeline -->
         <div class="bg-white shadow-sm rounded-lg p-6">
             <h2 class="text-lg font-semibold text-gray-900 mb-4">処理パイプライン</h2>

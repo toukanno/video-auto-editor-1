@@ -65,6 +65,16 @@
                        class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                 <span class="ml-2 text-sm text-gray-700">9:16 ショート動画を生成する</span>
             </label>
+            <label class="flex items-center">
+                <input type="checkbox" name="render_long" value="1" {{ old('render_long') ? 'checked' : '' }}
+                       class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <span class="ml-2 text-sm text-gray-700">16:9 の横動画も生成する</span>
+            </label>
+            <label class="flex items-center">
+                <input type="checkbox" name="auto_cut_silence" value="1" checked
+                       class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <span class="ml-2 text-sm text-gray-700">無音区間を自動カットする</span>
+            </label>
         </div>
 
         <!-- Submit -->

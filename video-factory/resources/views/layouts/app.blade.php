@@ -33,6 +33,10 @@
                            class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('caption-styles.*') ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:text-gray-900' }}">
                             テロップ設定
                         </a>
+                        <a href="{{ route('settings.index') }}"
+                           class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('settings.*') ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:text-gray-900' }}">
+                            設定 / ログ
+                        </a>
                     </div>
                 </div>
                 @auth

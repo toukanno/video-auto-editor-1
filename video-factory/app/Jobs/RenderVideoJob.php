@@ -36,10 +36,11 @@ class RenderVideoJob implements ShouldQueue
             'started_at' => now(),
         ]);
 
-        // Render with silence cut if silence segments exist
-        $hasSilence = $video->silenceSegments()->exists();
+        $shouldCutSilence = $video->shouldAutoCutSilence()
+            && str_contains($renderTask->render_type, 'auto_cut')
+            && $video->silenceSegments()->exists();
 
-        $outputPath = $hasSilence
+        $outputPath = $shouldCutSilence
             ? $service->renderWithSilenceCut($video, $renderTask, $this->captionFilePath)
             : $service->render($video, $renderTask, $this->captionFilePath);
 

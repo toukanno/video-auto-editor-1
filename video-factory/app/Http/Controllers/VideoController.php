@@ -30,11 +30,13 @@ class VideoController extends Controller
 
     public function store(Request $request, VideoPipelineService $pipeline)
     {
-        $request->validate([
+        $validated = $request->validate([
             'video' => 'required|file|mimetypes:video/mp4,video/quicktime,video/x-msvideo|max:2097152', // 2GB
             'title' => 'nullable|string|max:255',
             'caption_style_id' => 'nullable|exists:caption_styles,id',
             'render_short' => 'nullable|boolean',
+            'render_long' => 'nullable|boolean',
+            'auto_cut_silence' => 'nullable|boolean',
         ]);
 
         $file = $request->file('video');
@@ -50,6 +52,12 @@ class VideoController extends Controller
             'storage_disk' => 'local',
             'original_path' => $storagePath,
             'status' => Video::STATUS_UPLOADED,
+            'preferred_caption_style_id' => $validated['caption_style_id'] ?? null,
+            'processing_options' => [
+                'render_short' => $request->boolean('render_short', true),
+                'render_long' => $request->boolean('render_long'),
+                'auto_cut_silence' => $request->boolean('auto_cut_silence', true),
+            ],
         ]);
 
         // Start processing pipeline
@@ -66,6 +74,7 @@ class VideoController extends Controller
         $video->load([
             'transcriptSegments',
             'silenceSegments',
+            'preferredCaptionStyle',
             'renderTasks.captionStyle',
             'renderTasks.publishTasks',
         ]);

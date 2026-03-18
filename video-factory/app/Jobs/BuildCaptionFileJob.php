@@ -28,8 +28,9 @@ class BuildCaptionFileJob implements ShouldQueue
         $video = Video::findOrFail($this->videoId);
         $video->markStatus(Video::STATUS_BUILDING_CAPTION);
 
-        // Get user's default caption style or create one
-        $style = CaptionStyle::where('user_id', $video->user_id)->first()
+        // Get selected caption style, otherwise use default
+        $style = $video->preferredCaptionStyle
+            ?? CaptionStyle::where('user_id', $video->user_id)->first()
             ?? $styleService->ensureDefault($video->user);
 
         // Build ASS file with styling
@@ -38,19 +39,50 @@ class BuildCaptionFileJob implements ShouldQueue
         // Also build SRT as backup
         $builder->buildSrt($video);
 
-        // Create render task if none exists
-        $renderTask = $video->renderTasks()->firstOrCreate(
-            ['render_type' => 'short'],
-            [
-                'caption_style_id' => $style->id,
+        $renderProfiles = [];
+
+        if ($video->shouldRenderShort()) {
+            $renderProfiles[] = [
+                'render_type' => $video->shouldAutoCutSilence() ? 'short_auto_cut' : 'short',
                 'aspect_ratio' => '9:16',
                 'target_width' => 1080,
                 'target_height' => 1920,
-                'status' => RenderTask::STATUS_PENDING,
-            ]
-        );
+            ];
+        }
 
-        RenderVideoJob::dispatch($this->videoId, $renderTask->id, $captionPath);
+        if ($video->shouldRenderLong()) {
+            $renderProfiles[] = [
+                'render_type' => 'long',
+                'aspect_ratio' => '16:9',
+                'target_width' => 1920,
+                'target_height' => 1080,
+            ];
+        }
+
+        if (empty($renderProfiles)) {
+            $renderProfiles[] = [
+                'render_type' => $video->shouldAutoCutSilence() ? 'short_auto_cut' : 'short',
+                'aspect_ratio' => '9:16',
+                'target_width' => 1080,
+                'target_height' => 1920,
+            ];
+        }
+
+        foreach ($renderProfiles as $profile) {
+            $renderTask = $video->renderTasks()->updateOrCreate(
+                ['render_type' => $profile['render_type']],
+                [
+                    'caption_style_id' => $style->id,
+                    'aspect_ratio' => $profile['aspect_ratio'],
+                    'target_width' => $profile['target_width'],
+                    'target_height' => $profile['target_height'],
+                    'status' => RenderTask::STATUS_PENDING,
+                    'error_message' => null,
+                ]
+            );
+
+            RenderVideoJob::dispatch($this->videoId, $renderTask->id, $captionPath);
+        }
     }
 
     public function failed(Throwable $e): void
