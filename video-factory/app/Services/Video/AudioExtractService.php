@@ -9,9 +9,6 @@ use RuntimeException;
 
 class AudioExtractService
 {
-    /**
-     * Extract audio from video as mono 16kHz WAV (optimal for transcription).
-     */
     public function extract(Video $video): string
     {
         $inputPath = Storage::disk($video->storage_disk)->path($video->original_path);
@@ -23,11 +20,11 @@ class AudioExtractService
         $outputPath = Storage::disk($video->storage_disk)->path($outputRelative);
 
         $result = Process::timeout(600)->run([
-            'ffmpeg', '-i', $inputPath,
-            '-vn',           // no video
-            '-ac', '1',      // mono
-            '-ar', '16000',  // 16kHz
-            '-y',            // overwrite
+            config('videofactory.ffmpeg_path', 'ffmpeg'), '-i', $inputPath,
+            '-vn',
+            '-ac', '1',
+            '-ar', '16000',
+            '-y',
             $outputPath,
         ]);
 
@@ -38,15 +35,12 @@ class AudioExtractService
         return $outputRelative;
     }
 
-    /**
-     * Probe video metadata (duration, resolution, fps).
-     */
     public function probe(Video $video): array
     {
         $inputPath = Storage::disk($video->storage_disk)->path($video->original_path);
 
         $result = Process::timeout(30)->run([
-            'ffprobe',
+            config('videofactory.ffprobe_path', 'ffprobe'),
             '-v', 'quiet',
             '-print_format', 'json',
             '-show_format',
@@ -59,18 +53,13 @@ class AudioExtractService
         }
 
         $data = json_decode($result->output(), true);
-        $videoStream = collect($data['streams'] ?? [])
-            ->firstWhere('codec_type', 'video');
-
+        $videoStream = collect($data['streams'] ?? [])->firstWhere('codec_type', 'video');
         $duration = (float) ($data['format']['duration'] ?? 0);
         $width = (int) ($videoStream['width'] ?? 0);
         $height = (int) ($videoStream['height'] ?? 0);
-
         $fpsRaw = $videoStream['r_frame_rate'] ?? '30/1';
         $fpsParts = explode('/', $fpsRaw);
-        $fps = count($fpsParts) === 2 && (int) $fpsParts[1] > 0
-            ? (float) $fpsParts[0] / (float) $fpsParts[1]
-            : 30.0;
+        $fps = count($fpsParts) === 2 && (int) $fpsParts[1] > 0 ? (float) $fpsParts[0] / (float) $fpsParts[1] : 30.0;
 
         return [
             'duration_sec' => round($duration, 2),

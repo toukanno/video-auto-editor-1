@@ -28,29 +28,31 @@ class BuildCaptionFileJob implements ShouldQueue
         $video = Video::findOrFail($this->videoId);
         $video->markStatus(Video::STATUS_BUILDING_CAPTION);
 
-        // Get user's default caption style or create one
-        $style = CaptionStyle::where('user_id', $video->user_id)->first()
+        $style = $video->selectedCaptionStyle
+            ?? CaptionStyle::where('user_id', $video->user_id)->first()
             ?? $styleService->ensureDefault($video->user);
 
-        // Build ASS file with styling
-        $captionPath = $builder->buildAss($video, $style);
+        $captionPath = null;
+        if ($video->enable_captions) {
+            $captionPath = $builder->buildAss($video, $style);
+            $builder->buildSrt($video);
+        }
 
-        // Also build SRT as backup
-        $builder->buildSrt($video);
+        $renderDefaults = match ($video->target_aspect_ratio) {
+            '16:9' => ['aspect_ratio' => '16:9', 'target_width' => 1920, 'target_height' => 1080],
+            '1:1' => ['aspect_ratio' => '1:1', 'target_width' => 1080, 'target_height' => 1080],
+            default => ['aspect_ratio' => '9:16', 'target_width' => 1080, 'target_height' => 1920],
+        };
 
-        // Create render task if none exists
         $renderTask = $video->renderTasks()->firstOrCreate(
-            ['render_type' => 'short'],
-            [
+            ['render_type' => $video->render_short ? 'short' : 'main'],
+            array_merge($renderDefaults, [
                 'caption_style_id' => $style->id,
-                'aspect_ratio' => '9:16',
-                'target_width' => 1080,
-                'target_height' => 1920,
                 'status' => RenderTask::STATUS_PENDING,
-            ]
+            ])
         );
 
-        RenderVideoJob::dispatch($this->videoId, $renderTask->id, $captionPath);
+        RenderVideoJob::dispatch($this->videoId, $renderTask->id, $captionPath ?? '');
     }
 
     public function failed(Throwable $e): void

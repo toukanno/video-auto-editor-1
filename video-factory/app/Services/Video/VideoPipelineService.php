@@ -9,47 +9,55 @@ use App\Jobs\GenerateThumbnailJob;
 use App\Jobs\NormalizeTranscriptJob;
 use App\Jobs\RenderVideoJob;
 use App\Jobs\TranscribeVideoJob;
+use App\Models\RenderTask;
 use App\Models\Video;
+use RuntimeException;
 
 class VideoPipelineService
 {
-    /**
-     * Kick off the full processing pipeline for a video.
-     * Each job chains to the next on success.
-     */
     public function start(Video $video): void
     {
         ExtractAudioJob::dispatch($video->id);
     }
 
-    /**
-     * Re-run the pipeline from a specific step.
-     */
     public function rerunFrom(Video $video, string $step): void
     {
-        $jobMap = [
-            'extract_audio' => ExtractAudioJob::class,
-            'transcribe' => TranscribeVideoJob::class,
-            'normalize' => NormalizeTranscriptJob::class,
-            'detect_silence' => DetectSilenceJob::class,
-            'build_caption' => BuildCaptionFileJob::class,
-            'render' => RenderVideoJob::class,
-            'thumbnail' => GenerateThumbnailJob::class,
-        ];
-
-        $jobClass = $jobMap[$step] ?? ExtractAudioJob::class;
-        $jobClass::dispatch($video->id);
+        match ($step) {
+            'extract_audio' => ExtractAudioJob::dispatch($video->id),
+            'transcribe' => TranscribeVideoJob::dispatch($video->id),
+            'normalize' => NormalizeTranscriptJob::dispatch($video->id),
+            'detect_silence' => DetectSilenceJob::dispatch($video->id),
+            'build_caption' => BuildCaptionFileJob::dispatch($video->id),
+            'render' => $this->dispatchRender($video),
+            'thumbnail' => $this->dispatchThumbnail($video),
+            default => ExtractAudioJob::dispatch($video->id),
+        };
     }
 
-    /**
-     * Re-run from the last failed step.
-     */
     public function retry(Video $video): void
     {
         if ($video->last_failed_step) {
             $this->rerunFrom($video, $video->last_failed_step);
-        } else {
-            $this->start($video);
+            return;
         }
+        $this->start($video);
+    }
+
+    private function dispatchRender(Video $video): void
+    {
+        $renderTask = $video->renderTasks()->latest()->first();
+        if (!$renderTask) {
+            throw new RuntimeException('再レンダリング対象が見つかりません。');
+        }
+        RenderVideoJob::dispatch($video->id, $renderTask->id, $video->enable_captions ? 'videos/captions/' . $video->id . '.ass' : '');
+    }
+
+    private function dispatchThumbnail(Video $video): void
+    {
+        $renderTask = $video->renderTasks()->where('status', RenderTask::STATUS_COMPLETED)->latest()->first();
+        if (!$renderTask) {
+            throw new RuntimeException('サムネイル生成対象のレンダリング結果がありません。');
+        }
+        GenerateThumbnailJob::dispatch($video->id, $renderTask->id);
     }
 }

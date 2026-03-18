@@ -22,7 +22,7 @@ class RenderVideoJob implements ShouldQueue
     public function __construct(
         public int $videoId,
         public int $renderTaskId,
-        public string $captionFilePath
+        public string $captionFilePath = ''
     ) {}
 
     public function handle(RenderService $service): void
@@ -31,17 +31,11 @@ class RenderVideoJob implements ShouldQueue
         $renderTask = RenderTask::findOrFail($this->renderTaskId);
 
         $video->markStatus(Video::STATUS_RENDERING);
-        $renderTask->update([
-            'status' => RenderTask::STATUS_PROCESSING,
-            'started_at' => now(),
-        ]);
+        $renderTask->update(['status' => RenderTask::STATUS_PROCESSING, 'started_at' => now()]);
 
-        // Render with silence cut if silence segments exist
-        $hasSilence = $video->silenceSegments()->exists();
-
-        $outputPath = $hasSilence
-            ? $service->renderWithSilenceCut($video, $renderTask, $this->captionFilePath)
-            : $service->render($video, $renderTask, $this->captionFilePath);
+        $outputPath = $video->cut_silence && $video->silenceSegments()->exists()
+            ? $service->renderWithSilenceCut($video, $renderTask, $this->captionFilePath ?: null)
+            : $service->render($video, $renderTask, $this->captionFilePath ?: null);
 
         $renderTask->update([
             'output_path' => $outputPath,
@@ -50,8 +44,6 @@ class RenderVideoJob implements ShouldQueue
         ]);
 
         $video->markStatus(Video::STATUS_RENDERED);
-
-        // Chain to thumbnail generation
         GenerateThumbnailJob::dispatch($this->videoId, $this->renderTaskId);
     }
 

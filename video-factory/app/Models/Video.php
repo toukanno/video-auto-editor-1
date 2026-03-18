@@ -25,16 +25,24 @@ class Video extends Model
 
     protected $fillable = [
         'user_id',
+        'selected_caption_style_id',
         'title',
         'source_filename',
         'storage_disk',
         'original_path',
         'audio_path',
+        'bgm_path',
+        'bgm_volume',
+        'processing_profile',
         'duration_sec',
         'width',
         'height',
         'fps',
         'status',
+        'render_short',
+        'target_aspect_ratio',
+        'cut_silence',
+        'enable_captions',
         'error_message',
         'last_failed_step',
     ];
@@ -42,11 +50,21 @@ class Video extends Model
     protected $casts = [
         'duration_sec' => 'decimal:2',
         'fps' => 'decimal:2',
+        'render_short' => 'boolean',
+        'cut_silence' => 'boolean',
+        'enable_captions' => 'boolean',
+        'bgm_volume' => 'integer',
+        'processing_profile' => 'array',
     ];
 
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function selectedCaptionStyle(): BelongsTo
+    {
+        return $this->belongsTo(CaptionStyle::class, 'selected_caption_style_id');
     }
 
     public function transcriptSegments(): HasMany
@@ -81,5 +99,24 @@ class Video extends Model
     public function isFailed(): bool
     {
         return $this->status === self::STATUS_FAILED;
+    }
+
+    public function progressPercent(): int
+    {
+        $map = [
+            self::STATUS_UPLOADED => 5,
+            self::STATUS_EXTRACTING_AUDIO => 15,
+            self::STATUS_TRANSCRIBING => 30,
+            self::STATUS_NORMALIZING => 45,
+            self::STATUS_DETECTING_SILENCE => 60,
+            self::STATUS_BUILDING_CAPTION => 75,
+            self::STATUS_RENDERING => 90,
+            self::STATUS_RENDERED => 95,
+            self::STATUS_PUBLISHING => 98,
+            self::STATUS_COMPLETED => 100,
+            self::STATUS_FAILED => 100,
+        ];
+
+        return $map[$this->status] ?? 0;
     }
 }
