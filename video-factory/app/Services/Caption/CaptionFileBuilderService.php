@@ -43,11 +43,11 @@ class CaptionFileBuilderService
     /**
      * Build ASS caption file with styling from CaptionStyle.
      */
-    public function buildAss(Video $video, CaptionStyle $style): string
+    public function buildAss(Video $video, CaptionStyle $style, ?int $suffix = null): string
     {
         $segments = $video->transcriptSegments()->get();
         $outputDir = 'videos/captions';
-        $outputFilename = $video->id . '.ass';
+        $outputFilename = $video->id . ($suffix ? "_{$suffix}" : '') . '.ass';
         $outputRelative = $outputDir . '/' . $outputFilename;
 
         Storage::disk($video->storage_disk)->makeDirectory($outputDir);

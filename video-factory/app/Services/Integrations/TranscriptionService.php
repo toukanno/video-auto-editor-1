@@ -19,7 +19,16 @@ class TranscriptionService
         $apiKey = config('services.openai.api_key');
 
         if (empty($apiKey)) {
-            throw new RuntimeException('OpenAI API key not configured. Set OPENAI_API_KEY in .env');
+            $video->transcriptSegments()->delete();
+            $video->transcriptSegments()->create([
+                'seq' => 1,
+                'start_ms' => 0,
+                'end_ms' => (int) (($video->duration_sec ?? 10) * 1000),
+                'text_raw' => 'OpenAI APIキー未設定のため、ローカル確認用のダミー字幕を生成しました。',
+                'text_normalized' => 'ローカル確認用のダミー字幕です。',
+            ]);
+
+            return;
         }
 
         $response = Http::withHeaders([

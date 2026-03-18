@@ -35,6 +35,7 @@ class VideoController extends Controller
             'title' => 'nullable|string|max:255',
             'caption_style_id' => 'nullable|exists:caption_styles,id',
             'render_short' => 'nullable|boolean',
+            'render_long' => 'nullable|boolean',
         ]);
 
         $file = $request->file('video');
@@ -51,6 +52,28 @@ class VideoController extends Controller
             'original_path' => $storagePath,
             'status' => Video::STATUS_UPLOADED,
         ]);
+
+        if ($request->boolean('render_short', true)) {
+            $video->renderTasks()->create([
+                'caption_style_id' => $request->input('caption_style_id'),
+                'render_type' => 'short',
+                'aspect_ratio' => '9:16',
+                'target_width' => 1080,
+                'target_height' => 1920,
+                'status' => 'pending',
+            ]);
+        }
+
+        if ($request->boolean('render_long')) {
+            $video->renderTasks()->create([
+                'caption_style_id' => $request->input('caption_style_id'),
+                'render_type' => 'long',
+                'aspect_ratio' => '16:9',
+                'target_width' => 1920,
+                'target_height' => 1080,
+                'status' => 'pending',
+            ]);
+        }
 
         // Start processing pipeline
         $pipeline->start($video);

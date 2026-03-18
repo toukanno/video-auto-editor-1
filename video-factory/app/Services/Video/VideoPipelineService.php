@@ -10,6 +10,7 @@ use App\Jobs\NormalizeTranscriptJob;
 use App\Jobs\RenderVideoJob;
 use App\Jobs\TranscribeVideoJob;
 use App\Models\Video;
+use Illuminate\Support\Facades\Storage;
 
 class VideoPipelineService
 {
@@ -38,6 +39,27 @@ class VideoPipelineService
         ];
 
         $jobClass = $jobMap[$step] ?? ExtractAudioJob::class;
+
+        if ($jobClass === RenderVideoJob::class) {
+            foreach ($video->renderTasks as $task) {
+                $captionPath = 'videos/captions/'.$video->id."_{$task->id}.ass";
+
+                if (Storage::disk($video->storage_disk)->exists($captionPath)) {
+                    RenderVideoJob::dispatch($video->id, $task->id, $captionPath);
+                }
+            }
+
+            return;
+        }
+
+        if ($jobClass === GenerateThumbnailJob::class) {
+            foreach ($video->renderTasks as $task) {
+                GenerateThumbnailJob::dispatch($video->id, $task->id);
+            }
+
+            return;
+        }
+
         $jobClass::dispatch($video->id);
     }
 
