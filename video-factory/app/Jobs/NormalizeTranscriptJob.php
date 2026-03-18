@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Video;
 use App\Services\Caption\TranscriptNormalizerService;
+use App\Services\Video\ProcessingLogService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -20,16 +21,17 @@ class NormalizeTranscriptJob implements ShouldQueue
 
     public function __construct(public int $videoId) {}
 
-    public function handle(TranscriptNormalizerService $service): void
+    public function handle(TranscriptNormalizerService $service, ProcessingLogService $logService): void
     {
         $video = Video::findOrFail($this->videoId);
         $video->markStatus(Video::STATUS_NORMALIZING);
 
-        // Try LLM normalization, fall back to rule-based
         try {
             $service->normalize($video);
-        } catch (Throwable) {
+            $logService->info($video, 'normalize', '字幕テキストを整形しました。');
+        } catch (Throwable $e) {
             $service->normalizeWithRules($video);
+            $logService->warning($video, 'normalize', 'LLM整形に失敗したため、ルールベース整形へフォールバックしました。', ['reason' => $e->getMessage()]);
         }
 
         DetectSilenceJob::dispatch($this->videoId);
@@ -39,5 +41,6 @@ class NormalizeTranscriptJob implements ShouldQueue
     {
         $video = Video::find($this->videoId);
         $video?->markFailed('normalize', $e->getMessage());
+        if ($video) app(ProcessingLogService::class)->error($video, 'normalize', $e->getMessage());
     }
 }

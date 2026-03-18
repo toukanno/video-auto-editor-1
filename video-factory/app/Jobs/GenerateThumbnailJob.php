@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\RenderTask;
 use App\Models\Video;
+use App\Services\Video\ProcessingLogService;
 use App\Services\Video\ThumbnailService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -19,27 +20,26 @@ class GenerateThumbnailJob implements ShouldQueue
     public int $tries = 2;
     public int $timeout = 60;
 
-    public function __construct(
-        public int $videoId,
-        public int $renderTaskId
-    ) {}
+    public function __construct(public int $videoId, public int $renderTaskId) {}
 
-    public function handle(ThumbnailService $service): void
+    public function handle(ThumbnailService $service, ProcessingLogService $logService): void
     {
         $video = Video::findOrFail($this->videoId);
-
         $thumbPath = $service->generate($video);
-
         $renderTask = RenderTask::findOrFail($this->renderTaskId);
         $renderTask->update(['thumbnail_path' => $thumbPath]);
 
-        $video->markStatus(Video::STATUS_COMPLETED);
+        if (!$video->renderTasks()->where('status', '!=', RenderTask::STATUS_COMPLETED)->exists()) {
+            $video->markStatus(Video::STATUS_COMPLETED);
+        }
+
+        $logService->info($video, 'thumbnail', 'サムネイル生成が完了しました。');
     }
 
     public function failed(Throwable $e): void
     {
-        // Thumbnail failure is not critical, still mark as completed
         $video = Video::find($this->videoId);
         $video?->markStatus(Video::STATUS_COMPLETED);
+        if ($video) app(ProcessingLogService::class)->warning($video, 'thumbnail', 'サムネイル生成に失敗しましたが処理は継続完了扱いです。', ['reason' => $e->getMessage()]);
     }
 }

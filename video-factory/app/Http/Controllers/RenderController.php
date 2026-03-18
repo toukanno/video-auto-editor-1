@@ -20,9 +20,6 @@ class RenderController extends Controller
         return view('renders.index', compact('renders'));
     }
 
-    /**
-     * Stream the rendered video for preview.
-     */
     public function preview(RenderTask $renderTask)
     {
         $video = $renderTask->video;
@@ -32,16 +29,11 @@ class RenderController extends Controller
             abort(404);
         }
 
-        $path = Storage::disk($video->storage_disk)->path($renderTask->output_path);
-
-        return response()->file($path, [
+        return response()->file(Storage::disk($video->storage_disk)->path($renderTask->output_path), [
             'Content-Type' => 'video/mp4',
         ]);
     }
 
-    /**
-     * Download the rendered video.
-     */
     public function download(RenderTask $renderTask)
     {
         $video = $renderTask->video;
@@ -51,9 +43,8 @@ class RenderController extends Controller
             abort(404);
         }
 
-        $path = Storage::disk($video->storage_disk)->path($renderTask->output_path);
-        $filename = $video->title . '_' . $renderTask->render_type . '.mp4';
+        $filename = str($video->title)->slug('_') . '_' . $renderTask->render_type . '.mp4';
 
-        return response()->download($path, $filename);
+        return response()->download(Storage::disk($video->storage_disk)->path($renderTask->output_path), $filename);
     }
 }

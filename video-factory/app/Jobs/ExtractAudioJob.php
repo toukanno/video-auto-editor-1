@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Video;
 use App\Services\Video\AudioExtractService;
+use App\Services\Video\ProcessingLogService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -20,20 +21,19 @@ class ExtractAudioJob implements ShouldQueue
 
     public function __construct(public int $videoId) {}
 
-    public function handle(AudioExtractService $service): void
+    public function handle(AudioExtractService $service, ProcessingLogService $logService): void
     {
         $video = Video::findOrFail($this->videoId);
         $video->markStatus(Video::STATUS_EXTRACTING_AUDIO);
+        $logService->info($video, 'extract_audio', '音声抽出とメタデータ解析を開始しました。');
 
-        // Probe video metadata
         $meta = $service->probe($video);
         $video->update($meta);
 
-        // Extract audio
         $audioPath = $service->extract($video);
         $video->update(['audio_path' => $audioPath]);
+        $logService->info($video, 'extract_audio', '音声抽出が完了しました。', $meta);
 
-        // Chain to next job
         TranscribeVideoJob::dispatch($this->videoId);
     }
 
@@ -41,5 +41,6 @@ class ExtractAudioJob implements ShouldQueue
     {
         $video = Video::find($this->videoId);
         $video?->markFailed('extract_audio', $e->getMessage());
+        if ($video) app(ProcessingLogService::class)->error($video, 'extract_audio', $e->getMessage());
     }
 }

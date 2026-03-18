@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Video;
+use App\Services\Video\ProcessingLogService;
 use App\Services\Video\SilenceDetectionService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -20,12 +21,13 @@ class DetectSilenceJob implements ShouldQueue
 
     public function __construct(public int $videoId) {}
 
-    public function handle(SilenceDetectionService $service): void
+    public function handle(SilenceDetectionService $service, ProcessingLogService $logService): void
     {
         $video = Video::findOrFail($this->videoId);
         $video->markStatus(Video::STATUS_DETECTING_SILENCE);
 
-        $service->detect($video);
+        $segments = $service->detect($video);
+        $logService->info($video, 'detect_silence', '無音区間の解析が完了しました。', ['count' => count($segments)]);
 
         BuildCaptionFileJob::dispatch($this->videoId);
     }
@@ -34,5 +36,6 @@ class DetectSilenceJob implements ShouldQueue
     {
         $video = Video::find($this->videoId);
         $video?->markFailed('detect_silence', $e->getMessage());
+        if ($video) app(ProcessingLogService::class)->error($video, 'detect_silence', $e->getMessage());
     }
 }
