@@ -2,7 +2,6 @@
 
 namespace App\Services\Integrations;
 
-use App\Models\TranscriptSegment;
 use App\Models\Video;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -10,16 +9,13 @@ use RuntimeException;
 
 class TranscriptionService
 {
-    /**
-     * Transcribe audio using OpenAI Whisper API.
-     */
-    public function transcribe(Video $video): void
+    public function transcribe(Video $video): array
     {
         $audioPath = Storage::disk($video->storage_disk)->path($video->audio_path);
         $apiKey = config('services.openai.api_key');
 
         if (empty($apiKey)) {
-            throw new RuntimeException('OpenAI API key not configured. Set OPENAI_API_KEY in .env');
+            return $this->transcribeFallback($video);
         }
 
         $response = Http::withHeaders([
@@ -39,9 +35,37 @@ class TranscriptionService
         }
 
         $data = $response->json();
-        $segments = $data['segments'] ?? [];
+        $this->persistSegments($video, $data['segments'] ?? []);
+        $this->storeTranscriptJson($video, $data);
 
-        // Clear existing segments
+        return ['mode' => 'openai', 'segments' => count($data['segments'] ?? [])];
+    }
+
+    private function transcribeFallback(Video $video): array
+    {
+        $duration = max((float) $video->duration_sec, 1.0);
+        $parts = min(6, max(1, (int) ceil($duration / 15)));
+        $segments = [];
+
+        for ($i = 0; $i < $parts; $i++) {
+            $start = ($duration / $parts) * $i;
+            $end = min($duration, ($duration / $parts) * ($i + 1));
+            $segments[] = [
+                'start' => round($start, 2),
+                'end' => round($end, 2),
+                'text' => '音声認識API未設定のため、ローカル確認用の仮字幕です。設定画面からAPIキーを追加すると高精度化できます。',
+                'avg_logprob' => -0.1,
+            ];
+        }
+
+        $this->persistSegments($video, $segments);
+        $this->storeTranscriptJson($video, ['mode' => 'fallback', 'segments' => $segments]);
+
+        return ['mode' => 'fallback', 'segments' => count($segments)];
+    }
+
+    private function persistSegments(Video $video, array $segments): void
+    {
         $video->transcriptSegments()->delete();
 
         foreach ($segments as $i => $seg) {
@@ -53,13 +77,14 @@ class TranscriptionService
                 'confidence' => $seg['avg_logprob'] ?? null,
             ]);
         }
+    }
 
-        // Save raw transcript JSON
-        $transcriptDir = 'videos/transcripts';
-        Storage::disk($video->storage_disk)->makeDirectory($transcriptDir);
+    private function storeTranscriptJson(Video $video, array $payload): void
+    {
+        Storage::disk($video->storage_disk)->makeDirectory('videos/transcripts');
         Storage::disk($video->storage_disk)->put(
-            $transcriptDir . '/' . $video->id . '.json',
-            json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)
+            'videos/transcripts/' . $video->id . '.json',
+            json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)
         );
     }
 }

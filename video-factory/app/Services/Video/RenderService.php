@@ -10,38 +10,60 @@ use RuntimeException;
 
 class RenderService
 {
-    /**
-     * Render the final video with captions burned in and optional aspect ratio conversion.
-     */
-    public function render(Video $video, RenderTask $renderTask, string $captionFilePath): string
+    public function render(Video $video, RenderTask $renderTask, ?string $captionFilePath): string
+    {
+        return $this->runRender($video, $renderTask, $captionFilePath, false);
+    }
+
+    public function renderWithSilenceCut(Video $video, RenderTask $renderTask, ?string $captionFilePath): string
+    {
+        return $this->runRender($video, $renderTask, $captionFilePath, true);
+    }
+
+    private function runRender(Video $video, RenderTask $renderTask, ?string $captionFilePath, bool $cutSilence): string
     {
         $inputPath = Storage::disk($video->storage_disk)->path($video->original_path);
-
-        $outputDir = 'videos/rendered';
-        $outputFilename = $renderTask->id . '_' . $renderTask->render_type . '.mp4';
-        $outputRelative = $outputDir . '/' . $outputFilename;
-        Storage::disk($video->storage_disk)->makeDirectory($outputDir);
+        $outputRelative = 'videos/rendered/' . $renderTask->id . '_' . $renderTask->render_type . '.mp4';
+        Storage::disk($video->storage_disk)->makeDirectory('videos/rendered');
         $outputPath = Storage::disk($video->storage_disk)->path($outputRelative);
 
-        $captionAbsPath = Storage::disk($video->storage_disk)->path($captionFilePath);
+        $ffmpeg = config('videofactory.ffmpeg_path', 'ffmpeg');
+        $cmd = [$ffmpeg, '-i', $inputPath];
 
-        $filters = $this->buildFilterChain($video, $renderTask, $captionAbsPath);
+        $bgmPath = $video->processingOption('bgm_path');
+        if ($bgmPath) {
+            $cmd[] = '-stream_loop';
+            $cmd[] = '-1';
+            $cmd[] = '-i';
+            $cmd[] = Storage::disk($video->storage_disk)->path($bgmPath);
+        }
 
-        $cmd = [
-            'ffmpeg', '-i', $inputPath,
-            '-vf', $filters,
+        $sePath = $video->processingOption('se_path');
+        if ($sePath) {
+            $cmd[] = '-i';
+            $cmd[] = Storage::disk($video->storage_disk)->path($sePath);
+        }
+
+        $cmd = array_merge($cmd, $this->buildFilterArgs($video, $renderTask, $captionFilePath, $cutSilence));
+
+        $videoBitrate = $video->export_options['video_bitrate'] ?? '4M';
+        $audioBitrate = $video->export_options['audio_bitrate'] ?? '128k';
+        $fps = (string) ($video->export_options['fps'] ?? 30);
+
+        $cmd = array_merge($cmd, [
+            '-r', $fps,
             '-c:v', 'libx264',
-            '-preset', 'medium',
-            '-crf', '23',
+            '-preset', $this->resolvePreset($video->processing_profile),
+            '-b:v', $videoBitrate,
             '-c:a', 'aac',
-            '-b:a', '128k',
+            '-b:a', $audioBitrate,
             '-movflags', '+faststart',
+            '-shortest',
             '-y',
             $outputPath,
-        ];
+        ]);
 
         $result = Process::timeout(1800)->run($cmd);
-
         if (!$result->successful()) {
             throw new RuntimeException('Render failed: ' . $result->errorOutput());
         }
@@ -49,104 +71,94 @@ class RenderService
         return $outputRelative;
     }
 
-    /**
-     * Render with silence segments removed.
-     */
-    public function renderWithSilenceCut(
-        Video $video,
-        RenderTask $renderTask,
-        string $captionFilePath
-    ): string {
-        $silenceSegments = $video->silenceSegments()->get();
-
-        if ($silenceSegments->isEmpty()) {
-            return $this->render($video, $renderTask, $captionFilePath);
-        }
-
-        // Build select filter to exclude silence segments
-        $inputPath = Storage::disk($video->storage_disk)->path($video->original_path);
-        $outputDir = 'videos/rendered';
-        $outputFilename = $renderTask->id . '_' . $renderTask->render_type . '_cut.mp4';
-        $outputRelative = $outputDir . '/' . $outputFilename;
-        Storage::disk($video->storage_disk)->makeDirectory($outputDir);
-        $outputPath = Storage::disk($video->storage_disk)->path($outputRelative);
-
-        // Create a concat filter from non-silent segments
-        $selectParts = [];
-        $prevEnd = 0.0;
-
-        foreach ($silenceSegments as $seg) {
-            $startSec = $seg->start_ms / 1000;
-            if ($startSec > $prevEnd) {
-                $selectParts[] = "between(t,{$prevEnd},{$startSec})";
-            }
-            $prevEnd = $seg->end_ms / 1000;
-        }
-        // Add the last segment after final silence
-        $selectParts[] = "gte(t,{$prevEnd})";
-
-        $selectExpr = implode('+', $selectParts);
-        $captionAbsPath = Storage::disk($video->storage_disk)->path($captionFilePath);
-
-        $videoFilter = "select='{$selectExpr}',setpts=N/FRAME_RATE/TB";
-        $audioFilter = "aselect='{$selectExpr}',asetpts=N/SR/TB";
-
-        // Add caption overlay and aspect ratio conversion
-        $captionFilter = $this->buildCaptionFilter($captionAbsPath);
-        $scaleFilter = $this->buildScaleFilter($renderTask);
-
-        $vf = implode(',', array_filter([$videoFilter, $scaleFilter, $captionFilter]));
-        $af = $audioFilter;
-
-        $cmd = [
-            'ffmpeg', '-i', $inputPath,
-            '-vf', $vf,
-            '-af', $af,
-            '-c:v', 'libx264',
-            '-preset', 'medium',
-            '-crf', '23',
-            '-c:a', 'aac',
-            '-b:a', '128k',
-            '-movflags', '+faststart',
-            '-y',
-            $outputPath,
-        ];
-
-        $result = Process::timeout(1800)->run($cmd);
-
-        if (!$result->successful()) {
-            throw new RuntimeException('Render with cut failed: ' . $result->errorOutput());
-        }
-
-        return $outputRelative;
-    }
-
-    private function buildFilterChain(Video $video, RenderTask $renderTask, string $captionPath): string
+    private function buildFilterArgs(Video $video, RenderTask $renderTask, ?string $captionFilePath, bool $cutSilence): array
     {
-        $filters = [];
+        $videoFilters = [];
+        $audioFilters = [];
 
-        $filters[] = $this->buildScaleFilter($renderTask);
-        $filters[] = $this->buildCaptionFilter($captionPath);
+        if ($cutSilence && $video->silenceSegments()->exists()) {
+            $parts = [];
+            $prevEnd = 0.0;
+            foreach ($video->silenceSegments as $seg) {
+                $startSec = $seg->start_ms / 1000;
+                if ($startSec > $prevEnd) {
+                    $parts[] = "between(t,{$prevEnd},{$startSec})";
+                }
+                $prevEnd = $seg->end_ms / 1000;
+            }
+            $parts[] = "gte(t,{$prevEnd})";
+            $selectExpr = implode('+', $parts);
+            $videoFilters[] = "select='{$selectExpr}'";
+            $videoFilters[] = 'setpts=N/FRAME_RATE/TB';
+            $audioFilters[] = "aselect='{$selectExpr}'";
+            $audioFilters[] = 'asetpts=N/SR/TB';
+        }
 
-        return implode(',', array_filter($filters));
+        $videoFilters[] = $this->buildScaleFilter($video, $renderTask);
+
+        if ($video->processingOption('enable_caption', true) && $captionFilePath) {
+            $videoFilters[] = $this->buildCaptionFilter(Storage::disk($video->storage_disk)->path($captionFilePath));
+        }
+
+        if ($video->processingOption('bgm_path')) {
+            $bgmVolume = max(0, min(1, ((int) $video->processingOption('bgm_volume', 20)) / 100));
+            $audioFilters[] = '[1:a]volume=' . $bgmVolume . '[bgm]';
+            $audioMixInput = '[0:a][bgm]';
+            $audioFilters[] = $audioMixInput . 'amix=inputs=2:duration=first:dropout_transition=2[aout]';
+        }
+
+        if ($video->processingOption('se_path')) {
+            $inputIndex = $video->processingOption('bgm_path') ? 2 : 1;
+            $seVolume = max(0, min(1, ((int) $video->processingOption('se_volume', 40)) / 100));
+            $audioFilters[] = '[' . $inputIndex . ':a]volume=' . $seVolume . ',adelay=500|500[se]';
+            $base = collect($audioFilters)->contains(fn ($filter) => str_contains($filter, '[aout]')) ? '[aout]' : '[0:a]';
+            $audioFilters[] = $base . '[se]amix=inputs=2:duration=first:dropout_transition=2[aout2]';
+        }
+
+        $args = [];
+        if ($videoFilters) {
+            $args[] = '-vf';
+            $args[] = implode(',', $videoFilters);
+        }
+
+        if ($audioFilters) {
+            $args[] = '-filter_complex';
+            $args[] = implode(';', $audioFilters);
+            $args[] = '-map';
+            $args[] = '0:v:0';
+            $args[] = '-map';
+            $args[] = collect($audioFilters)->contains(fn ($filter) => str_contains($filter, '[aout2]')) ? '[aout2]' : (collect($audioFilters)->contains(fn ($filter) => str_contains($filter, '[aout]')) ? '[aout]' : '0:a:0');
+        }
+
+        return $args;
     }
 
-    private function buildScaleFilter(RenderTask $renderTask): string
+    private function buildScaleFilter(Video $video, RenderTask $renderTask): string
     {
         $w = $renderTask->target_width;
         $h = $renderTask->target_height;
+        $mode = $video->processingOption('resize_mode', $renderTask->render_type === 'short' ? 'short' : 'long');
 
-        if ($renderTask->aspect_ratio === '9:16') {
-            // Crop to center then scale for vertical video
-            return "crop=ih*9/16:ih,scale={$w}:{$h}";
-        }
-
-        return "scale={$w}:{$h}:force_original_aspect_ratio=decrease,pad={$w}:{$h}:(ow-iw)/2:(oh-ih)/2";
+        return match ($mode) {
+            'square' => "scale={$w}:{$w}:force_original_aspect_ratio=decrease,pad={$w}:{$w}:(ow-iw)/2:(oh-ih)/2",
+            'original' => 'scale=iw:ih',
+            'long' => "scale={$w}:{$h}:force_original_aspect_ratio=decrease,pad={$w}:{$h}:(ow-iw)/2:(oh-ih)/2",
+            default => "crop='min(iw,ih)*9/16':'min(iw,ih)',scale={$w}:{$h}",
+        };
     }
 
     private function buildCaptionFilter(string $captionPath): string
     {
         $escaped = str_replace([':', '\\', "'"], ['\\:', '\\\\', "\\'"], $captionPath);
         return "subtitles='{$escaped}'";
+    }
+
+    private function resolvePreset(string $profile): string
+    {
+        return match ($profile) {
+            'fast' => 'veryfast',
+            'quality' => 'slow',
+            default => 'medium',
+        };
     }
 }

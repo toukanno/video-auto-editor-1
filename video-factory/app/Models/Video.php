@@ -37,11 +37,21 @@ class Video extends Model
         'status',
         'error_message',
         'last_failed_step',
+        'selected_caption_style_id',
+        'processing_profile',
+        'processing_options',
+        'export_options',
+        'pipeline_summary',
+        'last_processed_at',
     ];
 
     protected $casts = [
         'duration_sec' => 'decimal:2',
         'fps' => 'decimal:2',
+        'processing_options' => 'array',
+        'export_options' => 'array',
+        'pipeline_summary' => 'array',
+        'last_processed_at' => 'datetime',
     ];
 
     public function user(): BelongsTo
@@ -64,9 +74,22 @@ class Video extends Model
         return $this->hasMany(RenderTask::class);
     }
 
+    public function processingLogs(): HasMany
+    {
+        return $this->hasMany(ProcessingLog::class)->latest('id');
+    }
+
+    public function selectedCaptionStyle(): BelongsTo
+    {
+        return $this->belongsTo(CaptionStyle::class, 'selected_caption_style_id');
+    }
+
     public function markStatus(string $status): void
     {
-        $this->update(['status' => $status, 'error_message' => null]);
+        $this->update([
+            'status' => $status,
+            'error_message' => null,
+        ]);
     }
 
     public function markFailed(string $step, string $message): void
@@ -81,5 +104,27 @@ class Video extends Model
     public function isFailed(): bool
     {
         return $this->status === self::STATUS_FAILED;
+    }
+
+    public function progressPercent(): int
+    {
+        return match ($this->status) {
+            self::STATUS_UPLOADED => 5,
+            self::STATUS_EXTRACTING_AUDIO => 15,
+            self::STATUS_TRANSCRIBING => 30,
+            self::STATUS_NORMALIZING => 45,
+            self::STATUS_DETECTING_SILENCE => 60,
+            self::STATUS_BUILDING_CAPTION => 75,
+            self::STATUS_RENDERING => 90,
+            self::STATUS_RENDERED, self::STATUS_COMPLETED => 100,
+            self::STATUS_PUBLISHING => 95,
+            self::STATUS_FAILED => 0,
+            default => 0,
+        };
+    }
+
+    public function processingOption(string $key, mixed $default = null): mixed
+    {
+        return data_get($this->processing_options ?? [], $key, $default);
     }
 }

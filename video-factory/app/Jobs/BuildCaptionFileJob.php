@@ -7,6 +7,7 @@ use App\Models\RenderTask;
 use App\Models\Video;
 use App\Services\Caption\CaptionFileBuilderService;
 use App\Services\Caption\CaptionStyleService;
+use App\Services\Video\ProcessingLogService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -23,39 +24,45 @@ class BuildCaptionFileJob implements ShouldQueue
 
     public function __construct(public int $videoId) {}
 
-    public function handle(CaptionFileBuilderService $builder, CaptionStyleService $styleService): void
+    public function handle(CaptionFileBuilderService $builder, CaptionStyleService $styleService, ProcessingLogService $logService): void
     {
         $video = Video::findOrFail($this->videoId);
         $video->markStatus(Video::STATUS_BUILDING_CAPTION);
 
-        // Get user's default caption style or create one
-        $style = CaptionStyle::where('user_id', $video->user_id)->first()
+        $style = $video->selectedCaptionStyle
+            ?? CaptionStyle::where('user_id', $video->user_id)->first()
             ?? $styleService->ensureDefault($video->user);
 
-        // Build ASS file with styling
-        $captionPath = $builder->buildAss($video, $style);
+        $captionPath = $video->processingOption('enable_caption', true)
+            ? $builder->buildAss($video, $style)
+            : null;
 
-        // Also build SRT as backup
         $builder->buildSrt($video);
+        $logService->info($video, 'build_caption', '字幕ファイルを生成しました。', ['style' => $style->name]);
 
-        // Create render task if none exists
-        $renderTask = $video->renderTasks()->firstOrCreate(
-            ['render_type' => 'short'],
-            [
-                'caption_style_id' => $style->id,
-                'aspect_ratio' => '9:16',
-                'target_width' => 1080,
-                'target_height' => 1920,
-                'status' => RenderTask::STATUS_PENDING,
-            ]
-        );
+        $tasks = [];
+        if ($video->processingOption('generate_short', true)) {
+            $tasks[] = $video->renderTasks()->updateOrCreate(
+                ['render_type' => 'short'],
+                ['caption_style_id' => $style->id, 'aspect_ratio' => '9:16', 'target_width' => 1080, 'target_height' => 1920, 'status' => RenderTask::STATUS_PENDING]
+            );
+        }
+        if ($video->processingOption('generate_long', false)) {
+            $tasks[] = $video->renderTasks()->updateOrCreate(
+                ['render_type' => 'long'],
+                ['caption_style_id' => $style->id, 'aspect_ratio' => '16:9', 'target_width' => 1920, 'target_height' => 1080, 'status' => RenderTask::STATUS_PENDING]
+            );
+        }
 
-        RenderVideoJob::dispatch($this->videoId, $renderTask->id, $captionPath);
+        foreach ($tasks as $renderTask) {
+            RenderVideoJob::dispatch($this->videoId, $renderTask->id, $captionPath ?? '');
+        }
     }
 
     public function failed(Throwable $e): void
     {
         $video = Video::find($this->videoId);
         $video?->markFailed('build_caption', $e->getMessage());
+        if ($video) app(ProcessingLogService::class)->error($video, 'build_caption', $e->getMessage());
     }
 }
