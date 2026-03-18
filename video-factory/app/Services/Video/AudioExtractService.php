@@ -19,11 +19,15 @@ class AudioExtractService
         $outputFilename = $video->id . '.wav';
         $outputRelative = $outputDir . '/' . $outputFilename;
 
+        if (!$this->commandExists(config('videofactory.ffmpeg_path', 'ffmpeg'))) {
+            return $video->original_path;
+        }
+
         Storage::disk($video->storage_disk)->makeDirectory($outputDir);
         $outputPath = Storage::disk($video->storage_disk)->path($outputRelative);
 
         $result = Process::timeout(600)->run([
-            'ffmpeg', '-i', $inputPath,
+            config('videofactory.ffmpeg_path', 'ffmpeg'), '-i', $inputPath,
             '-vn',           // no video
             '-ac', '1',      // mono
             '-ar', '16000',  // 16kHz
@@ -45,8 +49,17 @@ class AudioExtractService
     {
         $inputPath = Storage::disk($video->storage_disk)->path($video->original_path);
 
+        if (!$this->commandExists(config('videofactory.ffprobe_path', 'ffprobe'))) {
+            return [
+                'duration_sec' => null,
+                'width' => null,
+                'height' => null,
+                'fps' => null,
+            ];
+        }
+
         $result = Process::timeout(30)->run([
-            'ffprobe',
+            config('videofactory.ffprobe_path', 'ffprobe'),
             '-v', 'quiet',
             '-print_format', 'json',
             '-show_format',
@@ -78,5 +91,10 @@ class AudioExtractService
             'height' => $height,
             'fps' => round($fps, 2),
         ];
+    }
+
+    private function commandExists(string $command): bool
+    {
+        return filled(shell_exec('command -v '.escapeshellarg($command)));
     }
 }

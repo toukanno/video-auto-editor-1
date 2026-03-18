@@ -23,12 +23,18 @@ class RenderService
         Storage::disk($video->storage_disk)->makeDirectory($outputDir);
         $outputPath = Storage::disk($video->storage_disk)->path($outputRelative);
 
+        if (!$this->commandExists(config('videofactory.ffmpeg_path', 'ffmpeg'))) {
+            Storage::disk($video->storage_disk)->copy($video->original_path, $outputRelative);
+
+            return $outputRelative;
+        }
+
         $captionAbsPath = Storage::disk($video->storage_disk)->path($captionFilePath);
 
         $filters = $this->buildFilterChain($video, $renderTask, $captionAbsPath);
 
         $cmd = [
-            'ffmpeg', '-i', $inputPath,
+            config('videofactory.ffmpeg_path', 'ffmpeg'), '-i', $inputPath,
             '-vf', $filters,
             '-c:v', 'libx264',
             '-preset', 'medium',
@@ -71,6 +77,12 @@ class RenderService
         Storage::disk($video->storage_disk)->makeDirectory($outputDir);
         $outputPath = Storage::disk($video->storage_disk)->path($outputRelative);
 
+        if (!$this->commandExists(config('videofactory.ffmpeg_path', 'ffmpeg'))) {
+            Storage::disk($video->storage_disk)->copy($video->original_path, $outputRelative);
+
+            return $outputRelative;
+        }
+
         // Create a concat filter from non-silent segments
         $selectParts = [];
         $prevEnd = 0.0;
@@ -99,7 +111,7 @@ class RenderService
         $af = $audioFilter;
 
         $cmd = [
-            'ffmpeg', '-i', $inputPath,
+            config('videofactory.ffmpeg_path', 'ffmpeg'), '-i', $inputPath,
             '-vf', $vf,
             '-af', $af,
             '-c:v', 'libx264',
@@ -148,5 +160,10 @@ class RenderService
     {
         $escaped = str_replace([':', '\\', "'"], ['\\:', '\\\\', "\\'"], $captionPath);
         return "subtitles='{$escaped}'";
+    }
+
+    private function commandExists(string $command): bool
+    {
+        return filled(shell_exec('command -v '.escapeshellarg($command)));
     }
 }

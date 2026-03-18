@@ -28,29 +28,35 @@ class BuildCaptionFileJob implements ShouldQueue
         $video = Video::findOrFail($this->videoId);
         $video->markStatus(Video::STATUS_BUILDING_CAPTION);
 
-        // Get user's default caption style or create one
-        $style = CaptionStyle::where('user_id', $video->user_id)->first()
-            ?? $styleService->ensureDefault($video->user);
+        $renderTasks = $video->renderTasks()->get();
 
-        // Build ASS file with styling
-        $captionPath = $builder->buildAss($video, $style);
+        if ($renderTasks->isEmpty()) {
+            $renderTasks = collect([
+                $video->renderTasks()->create([
+                    'caption_style_id' => null,
+                    'render_type' => 'short',
+                    'aspect_ratio' => '9:16',
+                    'target_width' => 1080,
+                    'target_height' => 1920,
+                    'status' => RenderTask::STATUS_PENDING,
+                ]),
+            ]);
+        }
 
-        // Also build SRT as backup
         $builder->buildSrt($video);
 
-        // Create render task if none exists
-        $renderTask = $video->renderTasks()->firstOrCreate(
-            ['render_type' => 'short'],
-            [
-                'caption_style_id' => $style->id,
-                'aspect_ratio' => '9:16',
-                'target_width' => 1080,
-                'target_height' => 1920,
-                'status' => RenderTask::STATUS_PENDING,
-            ]
-        );
+        foreach ($renderTasks as $renderTask) {
+            $style = $renderTask->captionStyle
+                ?? CaptionStyle::where('user_id', $video->user_id)->first()
+                ?? $styleService->ensureDefault($video->user);
 
-        RenderVideoJob::dispatch($this->videoId, $renderTask->id, $captionPath);
+            if (!$renderTask->caption_style_id) {
+                $renderTask->update(['caption_style_id' => $style->id]);
+            }
+
+            $captionPath = $builder->buildAss($video, $style, $renderTask->id);
+            RenderVideoJob::dispatch($this->videoId, $renderTask->id, $captionPath);
+        }
     }
 
     public function failed(Throwable $e): void

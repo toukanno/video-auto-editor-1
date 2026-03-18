@@ -65,6 +65,11 @@
                        class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                 <span class="ml-2 text-sm text-gray-700">9:16 ショート動画を生成する</span>
             </label>
+            <label class="flex items-center">
+                <input type="checkbox" name="render_long" value="1"
+                       class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <span class="ml-2 text-sm text-gray-700">16:9 横長動画も生成する</span>
+            </label>
         </div>
 
         <!-- Submit -->

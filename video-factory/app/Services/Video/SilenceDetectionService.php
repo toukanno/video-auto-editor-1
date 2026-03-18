@@ -23,8 +23,14 @@ class SilenceDetectionService
     ): array {
         $audioPath = Storage::disk($video->storage_disk)->path($video->audio_path);
 
+        if (!filled(shell_exec('command -v '.escapeshellarg(config('videofactory.ffmpeg_path', 'ffmpeg'))))) {
+            $video->silenceSegments()->delete();
+
+            return [];
+        }
+
         $result = Process::timeout(300)->run([
-            'ffmpeg', '-i', $audioPath,
+            config('videofactory.ffmpeg_path', 'ffmpeg'), '-i', $audioPath,
             '-af', "silencedetect=noise={$noiseThreshold}dB:d={$minDuration}",
             '-f', 'null', '-',
         ]);

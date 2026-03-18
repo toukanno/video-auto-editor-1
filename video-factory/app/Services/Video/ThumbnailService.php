@@ -15,6 +15,10 @@ class ThumbnailService
      */
     public function generate(Video $video, ?float $timestampSec = null): string
     {
+        if (!filled(shell_exec('command -v '.escapeshellarg(config('videofactory.ffmpeg_path', 'ffmpeg'))))) {
+            throw new RuntimeException('FFmpeg is not available for thumbnail generation.');
+        }
+
         $inputPath = Storage::disk($video->storage_disk)->path($video->original_path);
 
         $outputDir = 'videos/thumbs';
@@ -26,7 +30,7 @@ class ThumbnailService
         $timestamp = $timestampSec ?? ($video->duration_sec * 0.25);
 
         $result = Process::timeout(30)->run([
-            'ffmpeg',
+            config('videofactory.ffmpeg_path', 'ffmpeg'),
             '-ss', (string) $timestamp,
             '-i', $inputPath,
             '-vframes', '1',
