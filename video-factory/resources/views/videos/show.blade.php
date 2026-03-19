@@ -113,9 +113,50 @@
                 </div>
             @endif
 
+            @if($renderTask->status === 'completed' && $renderTask->output_path)
+                <div class="mt-4 space-y-3 border-t pt-4">
+                    <h4 class="text-sm font-semibold text-gray-700">公開設定</h4>
+                    <form action="{{ route('videos.publish.youtube', $video) }}" method="POST" class="space-y-2 p-3 bg-gray-50 rounded-md">
+                        @csrf
+                        <input type="hidden" name="render_task_id" value="{{ $renderTask->id }}">
+                        <p class="text-sm font-medium text-gray-700">YouTube</p>
+                        <input type="text" name="title" placeholder="タイトル" value="{{ $video->title }}" required class="w-full text-sm border-gray-300 rounded-md">
+                        <textarea name="description" placeholder="説明文" rows="2" class="w-full text-sm border-gray-300 rounded-md"></textarea>
+                        <input type="text" name="tags" placeholder="タグ（カンマ区切り）" class="w-full text-sm border-gray-300 rounded-md">
+                        <select name="privacy_status" class="w-full text-sm border-gray-300 rounded-md">
+                            <option value="private">非公開</option>
+                            <option value="unlisted">限定公開</option>
+                            <option value="public">公開</option>
+                        </select>
+                        <div>
+                            <label class="text-xs text-gray-500">予約投稿（空欄で即時投稿）</label>
+                            <input type="datetime-local" name="scheduled_at" class="w-full text-sm border-gray-300 rounded-md" min="{{ now()->format('Y-m-d\TH:i') }}">
+                        </div>
+                        <button type="submit" class="w-full px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700">YouTubeに投稿</button>
+                    </form>
+
+                    <form action="{{ route('videos.publish.tiktok', $video) }}" method="POST" class="space-y-2 p-3 bg-gray-50 rounded-md">
+                        @csrf
+                        <input type="hidden" name="render_task_id" value="{{ $renderTask->id }}">
+                        <p class="text-sm font-medium text-gray-700">TikTok</p>
+                        <input type="text" name="title" placeholder="タイトル" value="{{ $video->title }}" class="w-full text-sm border-gray-300 rounded-md">
+                        <select name="privacy_status" class="w-full text-sm border-gray-300 rounded-md">
+                            <option value="private">非公開（下書き）</option>
+                            <option value="public">公開</option>
+                        </select>
+                        <div>
+                            <label class="text-xs text-gray-500">予約投稿（空欄で即時投稿）</label>
+                            <input type="datetime-local" name="scheduled_at" class="w-full text-sm border-gray-300 rounded-md" min="{{ now()->format('Y-m-d\TH:i') }}">
+                        </div>
+                        <button type="submit" class="w-full px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-md hover:bg-black">TikTokに投稿</button>
+                    </form>
+                </div>
+            @endif
+
             @foreach($renderTask->publishTasks as $pt)
             <div class="mt-3 p-3 bg-gray-50 rounded-md">
                 <div class="flex justify-between items-center"><span class="text-sm font-medium">{{ $pt->platform === 'youtube' ? 'YouTube' : 'TikTok' }}</span><x-status-badge :status="$pt->status" /></div>
+                @if($pt->scheduled_at && $pt->status === 'scheduled')<p class="text-xs text-amber-600 mt-1">予約: {{ $pt->scheduled_at->format('Y/m/d H:i') }}</p>@endif
                 @if($pt->external_url)<a href="{{ $pt->external_url }}" target="_blank" class="text-xs text-indigo-600 hover:text-indigo-800 mt-1 block">{{ $pt->external_url }}</a>@endif
                 @if($pt->error_message)<p class="text-xs text-red-600 mt-1">{{ $pt->error_message }}</p>@endif
             </div>
