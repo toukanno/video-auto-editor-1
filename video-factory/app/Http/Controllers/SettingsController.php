@@ -2,25 +2,20 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\SystemHealthService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 
 class SettingsController extends Controller
 {
-    public function index()
+    public function index(SystemHealthService $healthService)
     {
         $logPath = storage_path('logs/laravel.log');
         $logLines = File::exists($logPath)
             ? collect(explode("\n", trim(File::get($logPath))))->filter()->take(-80)->values()
             : collect();
 
-        $checks = [
-            'ffmpeg' => filled(shell_exec('command -v '.escapeshellarg(config('videofactory.ffmpeg_path', 'ffmpeg')))),
-            'ffprobe' => filled(shell_exec('command -v '.escapeshellarg(config('videofactory.ffprobe_path', 'ffprobe')))),
-            'openai' => filled(config('services.openai.api_key')),
-            'youtube' => filled(config('services.youtube.client_id')) && filled(config('services.youtube.client_secret')),
-            'tiktok' => filled(config('services.tiktok.client_key')) && filled(config('services.tiktok.client_secret')),
-        ];
+        $checks = $healthService->checks();
 
         return view('settings.index', compact('checks', 'logLines'));
     }
