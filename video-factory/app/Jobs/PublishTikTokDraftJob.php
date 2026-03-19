@@ -12,6 +12,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Storage;
+use RuntimeException;
 use Throwable;
 
 class PublishTikTokDraftJob implements ShouldQueue
@@ -35,7 +36,15 @@ class PublishTikTokDraftJob implements ShouldQueue
             ->where('platform', 'tiktok')
             ->firstOrFail();
 
+        if (empty($renderTask->output_path)) {
+            throw new RuntimeException('レンダリング済みの動画ファイルパスが見つかりません。');
+        }
+
         $videoPath = Storage::disk($video->storage_disk)->path($renderTask->output_path);
+
+        if (!file_exists($videoPath)) {
+            throw new RuntimeException("レンダリング済みの動画ファイルが存在しません: {$videoPath}");
+        }
 
         $asDraft = $publishTask->privacy_status !== 'public';
 
