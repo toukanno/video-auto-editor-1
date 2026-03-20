@@ -8,11 +8,11 @@
         <div class="bg-white shadow-sm rounded-lg p-6">
             <h1 class="text-xl font-bold text-gray-900 mb-4">実行環境チェック</h1>
             <div class="space-y-3 text-sm">
-                @foreach($checks as $label => $ok)
+                @foreach($checks as $check)
                     <div class="flex items-center justify-between">
-                        <span class="text-gray-600">{{ strtoupper($label) }}</span>
-                        <span class="px-2 py-1 rounded text-xs {{ $ok ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700' }}">
-                            {{ $ok ? '利用可' : '未設定 / 未導入' }}
+                        <span class="text-gray-600">{{ $check['label'] }}</span>
+                        <span class="px-2 py-1 rounded text-xs {{ $check['ok'] ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700' }}" title="{{ $check['detail'] }}">
+                            {{ $check['ok'] ? '利用可' : '未設定 / 未導入' }}
                         </span>
                     </div>
                 @endforeach
