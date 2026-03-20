@@ -13,6 +13,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Storage;
+use RuntimeException;
 use Throwable;
 
 class PublishYoutubeJob implements ShouldQueue
@@ -37,7 +38,15 @@ class PublishYoutubeJob implements ShouldQueue
             ->where('platform', 'youtube')
             ->firstOrFail();
 
+        if (empty($renderTask->output_path)) {
+            throw new RuntimeException('レンダリング済みの動画ファイルパスが見つかりません。');
+        }
+
         $videoPath = Storage::disk($video->storage_disk)->path($renderTask->output_path);
+
+        if (!file_exists($videoPath)) {
+            throw new RuntimeException("レンダリング済みの動画ファイルが存在しません: {$videoPath}");
+        }
 
         $result = $service->upload($publishTask, $account, $videoPath);
 

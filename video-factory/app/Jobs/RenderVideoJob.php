@@ -7,6 +7,7 @@ use App\Models\Video;
 use App\Services\Video\ProcessingLogService;
 use App\Services\Video\RenderService;
 use Illuminate\Bus\Queueable;
+use RuntimeException;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
@@ -31,9 +32,13 @@ class RenderVideoJob implements ShouldQueue
         $renderTask->update(['status' => RenderTask::STATUS_PROCESSING, 'started_at' => now()]);
         $logService->info($video, 'render', 'レンダリングを開始しました。', ['render_type' => $renderTask->render_type]);
 
+        if (empty($this->captionFilePath)) {
+            throw new RuntimeException('字幕ファイルパスが指定されていません。');
+        }
+
         $outputPath = $video->processingOption('enable_silence_cut', true) && $video->silenceSegments()->exists()
-            ? $service->renderWithSilenceCut($video, $renderTask, $this->captionFilePath ?: null)
-            : $service->render($video, $renderTask, $this->captionFilePath ?: null);
+            ? $service->renderWithSilenceCut($video, $renderTask, $this->captionFilePath)
+            : $service->render($video, $renderTask, $this->captionFilePath);
 
         $renderTask->update(['output_path' => $outputPath, 'status' => RenderTask::STATUS_COMPLETED, 'finished_at' => now()]);
         $video->update(['status' => Video::STATUS_RENDERED, 'last_processed_at' => now()]);

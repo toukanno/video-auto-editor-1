@@ -94,8 +94,15 @@ class RenderService
             }
             $prevEnd = $seg->end_ms / 1000;
         }
-        // Add the last segment after final silence
-        $selectParts[] = "gte(t,{$prevEnd})";
+        // Add the last segment after final silence (only if there's content remaining)
+        $duration = $video->duration_seconds;
+        if ($duration === null || $prevEnd < $duration) {
+            $selectParts[] = "gte(t,{$prevEnd})";
+        }
+
+        if (empty($selectParts)) {
+            throw new RuntimeException('無音区間を除外すると有効なセグメントが残りません。');
+        }
 
         $selectExpr = implode('+', $selectParts);
         $captionAbsPath = Storage::disk($video->storage_disk)->path($captionFilePath);

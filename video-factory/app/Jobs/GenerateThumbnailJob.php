@@ -39,7 +39,15 @@ class GenerateThumbnailJob implements ShouldQueue
     public function failed(Throwable $e): void
     {
         $video = Video::find($this->videoId);
-        $video?->markStatus(Video::STATUS_COMPLETED);
-        if ($video) app(ProcessingLogService::class)->warning($video, 'thumbnail', 'サムネイル生成に失敗しましたが処理は継続完了扱いです。', ['reason' => $e->getMessage()]);
+        if (!$video) {
+            return;
+        }
+
+        // Only mark as completed if no other render tasks are still processing
+        if (!$video->renderTasks()->where('status', '!=', RenderTask::STATUS_COMPLETED)->exists()) {
+            $video->markStatus(Video::STATUS_COMPLETED);
+        }
+
+        app(ProcessingLogService::class)->warning($video, 'thumbnail', 'サムネイル生成に失敗しましたが処理は継続完了扱いです。', ['reason' => $e->getMessage()]);
     }
 }
