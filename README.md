@@ -49,6 +49,20 @@ video-factory/
 └── routes/web.php                     # ルーティング
 ```
 
+## Quick Start
+
+```bash
+git clone https://github.com/toukanno/video-auto-editor-1.git
+cd video-auto-editor-1
+composer install
+cp .env.example .env
+php artisan key:generate
+php artisan migrate
+php artisan serve
+```
+
+ブラウザで `http://localhost:8000` を開いてください。
+
 ## Tech Stack / 技術スタック
 
 | Layer | Technology |
