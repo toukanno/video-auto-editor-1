@@ -95,7 +95,7 @@ class RenderService
             $prevEnd = $seg->end_ms / 1000;
         }
         // Add the last segment after final silence (only if there's content remaining)
-        $duration = $video->duration_seconds;
+        $duration = $video->duration_sec;
         if ($duration === null || $prevEnd < $duration) {
             $selectParts[] = "gte(t,{$prevEnd})";
         }
