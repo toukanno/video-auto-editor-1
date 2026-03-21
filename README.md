@@ -107,3 +107,9 @@ php artisan serve
 ## License
 
 [MIT](LICENSE)
+
+## Development Rules
+
+- [AGENTS.md](./AGENTS.md) — Sub-agent configuration for Claude Code / Codex
+- Commits must pass CI before merging to main
+- Use feature branches + pull requests for all changes
